@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYNAPSE // PROTOCOL CHECKOUT</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        :root { --accent: #00f2ff; --border: rgba(255, 255, 255, 0.1); }
+        body { background: #05070a; color: white; margin: 0; font-family: sans-serif; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+        
+        .checkout-grid { display: grid; grid-template-columns: 1fr 400px; gap: 30px; margin-top: 40px; }
+        .panel { background: rgba(10, 15, 25, 0.9); border: 1px solid var(--border); padding: 30px; border-radius: 12px; }
+
+        /* Стилі форми */
+        .input-group { margin-bottom: 20px; }
+        .input-group label { display: block; font-size: 11px; color: var(--accent); margin-bottom: 8px; letter-spacing: 1px; }
+        .input-group input { 
+            width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); 
+            padding: 12px; color: white; border-radius: 4px; outline: none; transition: 0.3s;
+        }
+        .input-group input:focus { border-color: var(--accent); background: rgba(0, 242, 255, 0.05); }
+
+        .cart-item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.9rem; }
+        
+        /* Термінал */
+        #payment-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.98); display: none; z-index: 10000;
+            flex-direction: column; align-items: center; justify-content: center;
+        }
+        .terminal-box { width: 450px; border: 1px solid var(--accent); padding: 30px; background: #000; font-family: 'Courier New', monospace; }
+        .progress-bar { width: 100%; height: 2px; background: #111; margin-top: 20px; }
+        .progress-fill { width: 0%; height: 100%; background: var(--accent); transition: width 0.4s; }
+
+        .checkout-btn {
+            width: 100%; padding: 18px; background: var(--accent); color: #000;
+            border: none; font-weight: 900; cursor: pointer; letter-spacing: 2px; margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="neuron-canvas"></canvas>
+
+    <main class="container">
+        <h1 style="margin-top: 40px; text-transform: uppercase;">Secure <span style="color:var(--accent)">Checkout</span></h1>
+        
+        <div class="checkout-grid">
+            <div class="panel">
+                <h3 style="margin-bottom: 25px; font-size: 0.9rem; letter-spacing: 2px;">[ 01 ] ДАНІ ОТРИМУВАЧА</h3>
+                <div class="input-group">
+                    <label>ПОВНЕ ІМ'Я (ПІБ)</label>
+                    <input type="text" id="user-name" placeholder="Введіть ваше ім'я">
+                </div>
+                <div class="input-group">
+                    <label>НОМЕР ТЕЛЕФОНУ</label>
+                    <input type="text" id="user-phone" placeholder="+380 00 000 00 00">
+                </div>
+                <div class="input-group">
+                    <label>МІСТО ТА ВІДДІЛЕННЯ</label>
+                    <input type="text" id="user-city" placeholder="Київ, Відділення №1">
+                </div>
+
+                <h3 style="margin: 40px 0 20px; font-size: 0.9rem; letter-spacing: 2px;">[ 02 ] ВАШЕ ЗАМОВЛЕННЯ</h3>
+                <div id="items-list"></div>
+            </div>
+
+            <div class="panel" style="border-color: var(--accent); height: fit-content;">
+                <h3 style="margin-bottom: 20px;">РАЗОМ ДО СПЛАТИ</h3>
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <span>Товари:</span>
+                    <span id="subtotal">0.00 €</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size: 1.5rem; font-weight: 900; margin-top: 20px;">
+                    <span>ВСЬОГО:</span>
+                    <span id="total-price" style="color: var(--accent);">0.00 €</span>
+                </div>
+
+                <button class="checkout-btn" onclick="startFinalProcess()">ПІДТВЕРДИТИ ТА ОПЛАТИТИ</button>
+            </div>
+        </div>
+    </main>
+
+    <div id="payment-overlay">
+        <div class="terminal-box">
+            <div id="terminal-text" style="color: var(--accent); font-size: 13px; line-height: 1.6;">
+                > Ініціалізація шифрування...<br>
+            </div>
+            <div class="progress-bar"><div id="fill" class="progress-fill"></div></div>
+        </div>
+    </div>
+
+    <script src="neurons.js"></script>
+    <script>
+        function renderCart() {
+            const cart = JSON.parse(localStorage.getItem('synapse_cart')) || [];
+            const list = document.getElementById('items-list');
+            let subtotal = 0;
+            if(cart.length === 0) { list.innerHTML = "<p>Кошик порожній</p>"; return; }
+            list.innerHTML = cart.map(item => {
+                subtotal += item.price;
+                return `<div class="cart-item"><span>${item.name}</span><span>${item.price.toFixed(2)} €</span></div>`;
+            }).join('');
+            document.getElementById('subtotal').innerText = subtotal.toFixed(2) + " €";
+            document.getElementById('total-price').innerText = (subtotal).toFixed(2) + " €";
+        }
+
+        async function startFinalProcess() {
+            const name = document.getElementById('user-name').value;
+            const phone = document.getElementById('user-phone').value;
+            const city = document.getElementById('user-city').value;
+            const cart = JSON.parse(localStorage.getItem('synapse_cart')) || [];
+
+            if(!name || !phone || !city) { alert("Будь ласка, заповніть всі дані отримувача."); return; }
+            if(cart.length === 0) return;
+
+            document.getElementById('payment-overlay').style.display = 'flex';
+            const text = document.getElementById('terminal-text');
+            const fill = document.getElementById('fill');
+
+            const steps = [
+                { m: "> Зв'язок з сервером SYNAPSE_NET...", p: 25 },
+                { m: "> Перевірка даних: " + name + "...", p: 50 },
+                { m: "> Створення платіжного токену...", p: 75 },
+                { m: "> ТРАНЗАКЦІЯ УСПІШНА. ДАНІ ПЕРЕДАНО.", p: 100 }
+            ];
+
+            for (let step of steps) {
+                await new Promise(r => setTimeout(r, 1200));
+                text.innerHTML += step.m + "<br>";
+                fill.style.width = step.p + "%";
+            }
+
+            // Відправка в Telegram
+            const total = document.getElementById('total-price').innerText;
+            const message = `🔔 НОВЕ ЗАМОВЛЕННЯ!\n\n👤 Клієнт: ${name}\n📞 Тел: ${phone}\n📍 Місто: ${city}\n\n📦 Товари:\n${cart.map(i => "• " + i.name).join('\n')}\n\n💰 СУМА: ${total}`;
+            
+            sendToTelegram(message);
+
+            setTimeout(() => {
+                localStorage.removeItem('synapse_cart');
+                window.location.href = 'index.html';
+            }, 2000);
+        }
+
+        function sendToTelegram(msg) {
+            const token = "8047659686:AAHtNvU5b4t8-tYzP1_9rZxbP98yvHbaoVw"; // ВСТАВ СВІЙ ТОКЕН
+            const chatId = "1373957496";    // ВСТАВ СВІЙ ID
+            fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(msg)}`);
+        }
+
+        window.onload = renderCart;
+    </script>
+</body>
+</html>
